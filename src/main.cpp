@@ -6,7 +6,6 @@
 #include <HalStorage.h>
 #include <SPI.h>
 #include <builtinFonts/all.h>
-
 #include <cstring>
 
 #include "Battery.h"
@@ -22,6 +21,7 @@
 #include "activities/home/MyLibraryActivity.h"
 #include "activities/home/RecentBooksActivity.h"
 #include "activities/network/CrossPointWebServerActivity.h"
+#include "activities/YTMusicActivity.h"
 #include "activities/reader/ReaderActivity.h"
 #include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
@@ -246,10 +246,18 @@ void onGoToBrowser() {
   enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInputManager, onGoHome));
 }
 
+void onGoToYTMusic(const std::string& filename) {
+    exitActivity();
+    // Pass 'onGoHome' as a new fourth argument to the constructor
+    enterNewActivity(new YTMusicActivity(renderer, mappedInputManager, filename, onGoHome));
+}
+
+
 void onGoHome() {
   exitActivity();
+  // Pass onGoToYTMusic as an additional argument to the HomeActivity
   enterNewActivity(new HomeActivity(renderer, mappedInputManager, onGoToReader, onGoToMyLibrary, onGoToRecentBooks,
-                                    onGoToSettings, onGoToFileTransfer, onGoToBrowser));
+    onGoToSettings, onGoToFileTransfer, onGoToBrowser, onGoToYTMusic));
 }
 
 void setupDisplayAndFonts() {

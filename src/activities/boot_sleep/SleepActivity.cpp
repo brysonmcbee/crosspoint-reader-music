@@ -13,6 +13,11 @@
 #include "images/Logo120.h"
 #include "util/StringUtils.h"
 
+#include <HTTPClient.h>
+#include <WiFi.h>
+#include "WifiCredentialStore.h"
+#include <WiFiUdp.h>
+
 void SleepActivity::onEnter() {
   Activity::onEnter();
   GUI.drawPopup(renderer, "Entering Sleep...");
@@ -27,6 +32,11 @@ void SleepActivity::onEnter() {
       return renderCoverSleepScreen();
     default:
       return renderDefaultSleepScreen();
+  }
+
+  unsigned long startSync = millis();
+  while (millis() - startSync < 5000) {
+    vTaskDelay(100 / portTICK_PERIOD_MS); // Keeps the watchdog happy
   }
 }
 
@@ -80,8 +90,37 @@ void SleepActivity::renderCustomSleepScreen() const {
         delay(100);
         Bitmap bitmap(file, true);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+          String currentFilename = String(files[randomFileIndex].c_str());
           renderBitmapSleepScreen(bitmap);
           dir.close();
+          // --- START CUSTOM MUSIC SYNC ---
+          // We do this AFTER displayBuffer starts so the screen refreshes 
+          // WHILE the WiFi is connecting (saving you perceived time).
+          connectWifiSilently();
+
+          if (WiFi.status() == WL_CONNECTED) {
+              WiFiUDP udp;
+              // Begin listening on a local port (required to send)
+              udp.begin(5001); 
+
+              // Target the entire local network on port 5001
+              udp.beginPacket("255.255.255.255", 5001); 
+
+              String jsonPayload = "{\"filename\":\"" + currentFilename + "\"}";
+              udp.print(jsonPayload);
+              
+              if (udp.endPacket()) {
+                  Serial.println("[X4-UDP] Broadcast sent successfully!");
+              }
+              
+              vTaskDelay(200 / portTICK_PERIOD_MS);
+              WiFi.disconnect(true);
+              WiFi.mode(WIFI_OFF);
+          }
+
+          // FINAL SAFETY: Ensure the e-paper has finished its physical movement
+          // This prevents the "reboot on sleep" glitch.
+          vTaskDelay(2000 / portTICK_PERIOD_MS);
           return;
         }
       }
@@ -194,6 +233,8 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   }
 }
 
+
+
 void SleepActivity::renderCoverSleepScreen() const {
   void (SleepActivity::*renderNoCoverSleepScreen)() const;
   switch (SETTINGS.sleepScreen) {
@@ -265,7 +306,33 @@ void SleepActivity::renderCoverSleepScreen() const {
   if (Storage.openFileForRead("SLP", coverBmpPath, file)) {
     Bitmap bitmap(file);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-      Serial.printf("[%lu] [SLP] Rendering sleep cover: %s\n", millis(), coverBmpPath.c_str());
+      
+      // --- START CUSTOM MUSIC SYNC ---
+      connectWifiSilently(); // Try to connect first
+
+      if (WiFi.status() == WL_CONNECTED) {
+          HTTPClient http;
+          http.begin("http://192.168.1.XX:5000/play"); 
+          http.addHeader("Content-Type", "application/json");
+
+          String fullPath = String(coverBmpPath.c_str());
+          int lastSlash = fullPath.lastIndexOf('/');
+          String fileNameOnly = (lastSlash == -1) ? fullPath : fullPath.substring(lastSlash + 1);
+
+          String jsonPayload = "{\"filename\":\"" + fileNameOnly + "\"}";
+          http.POST(jsonPayload);
+          // Give the ESP32 a moment to flush the network buffer 
+          // before tearing down the radio.
+          delay(100); 
+          http.end();
+
+          // Disconnect immediately to save power
+          WiFi.disconnect(true);
+          WiFi.mode(WIFI_OFF);
+          Serial.println("[SLP-WIFI] Request sent. WiFi turned off.");
+      }
+      // --- END CUSTOM MUSIC SYNC ---
+
       renderBitmapSleepScreen(bitmap);
       return;
     }
@@ -277,4 +344,43 @@ void SleepActivity::renderCoverSleepScreen() const {
 void SleepActivity::renderBlankSleepScreen() const {
   renderer.clearScreen();
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+}
+
+void SleepActivity::connectWifiSilently() const {
+    if (WiFi.status() == WL_CONNECTED) return;
+
+    // 1. Get last credentials from the store
+    WIFI_STORE.loadFromFile(); 
+    const std::string lastSsid = WIFI_STORE.getLastConnectedSsid();
+    
+    if (lastSsid.empty()) {
+        Serial.println("[SLP-WIFI] No saved SSID found.");
+        return;
+    }
+
+    const auto* cred = WIFI_STORE.findCredential(lastSsid);
+    if (!cred) return;
+
+    // 2. Start connection
+    Serial.printf("[SLP-WIFI] Connecting to %s...\n", lastSsid.c_str());
+    WiFi.mode(WIFI_STA);
+    if (!cred->password.empty()) {
+        WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
+    } else {
+        WiFi.begin(cred->ssid.c_str());
+    }
+
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+        // vTaskDelay yields back to the OS so the watchdog doesn't bite
+        vTaskDelay(500 / portTICK_PERIOD_MS); 
+        attempts++;
+        Serial.print(".");
+    }
+    
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("\n[SLP-WIFI] Connected!");
+    } else {
+        Serial.println("\n[SLP-WIFI] Connection failed.");
+    }
 }

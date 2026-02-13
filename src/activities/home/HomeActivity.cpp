@@ -25,7 +25,7 @@ void HomeActivity::taskTrampoline(void* param) {
 }
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // My Library, Recents, File transfer, Settings
+  int count = 5;  // Added 1 for YTMusic: My Library, Recents, YTMusic, File transfer, Settings
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
@@ -209,11 +209,12 @@ void HomeActivity::loop() {
   });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    // Calculate dynamic indices based on which options are available
     int idx = 0;
     int menuSelectedIndex = selectorIndex - static_cast<int>(recentBooks.size());
+    
     const int myLibraryIdx = idx++;
     const int recentsIdx = idx++;
+    const int ytMusicIdx = idx++;              // New Index
     const int opdsLibraryIdx = hasOpdsUrl ? idx++ : -1;
     const int fileTransferIdx = idx++;
     const int settingsIdx = idx;
@@ -224,6 +225,8 @@ void HomeActivity::loop() {
       onMyLibraryOpen();
     } else if (menuSelectedIndex == recentsIdx) {
       onRecentsOpen();
+    } else if (menuSelectedIndex == ytMusicIdx) {
+      onYTMusicOpen("default");                // Calls the new callback
     } else if (menuSelectedIndex == opdsLibraryIdx) {
       onOpdsBrowserOpen();
     } else if (menuSelectedIndex == fileTransferIdx) {
@@ -260,11 +263,12 @@ void HomeActivity::render() {
                           recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
-  // Build menu items dynamically
-  std::vector<const char*> menuItems = {"Browse Files", "Recents", "File Transfer", "Settings"};
+// Insert "YTMusic" after "Recents"
+  std::vector<const char*> menuItems = {"Browse Files", "Recents", "YTMusic", "File Transfer", "Settings"};
+  
   if (hasOpdsUrl) {
-    // Insert OPDS Browser after My Library
-    menuItems.insert(menuItems.begin() + 2, "OPDS Browser");
+    // Note: Adjust the insertion index if OPDS is enabled
+    menuItems.insert(menuItems.begin() + 3, "OPDS Browser");
   }
 
   GUI.drawButtonMenu(

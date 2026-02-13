@@ -23,24 +23,28 @@ class HomeActivity final : public Activity {
   bool recentsLoaded = false;
   bool firstRenderDone = false;
   bool hasOpdsUrl = false;
-  bool coverRendered = false;      // Track if cover has been rendered once
-  bool coverBufferStored = false;  // Track if cover buffer is stored
-  uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
+  bool coverRendered = false;      
+  bool coverBufferStored = false;  
+  uint8_t* coverBuffer = nullptr;  
   std::vector<RecentBook> recentBooks;
+  
+  // Member functions for navigation
   const std::function<void(const std::string& path)> onSelectBook;
   const std::function<void()> onMyLibraryOpen;
   const std::function<void()> onRecentsOpen;
   const std::function<void()> onSettingsOpen;
   const std::function<void()> onFileTransferOpen;
   const std::function<void()> onOpdsBrowserOpen;
+  // Added member variable for YTMusic navigation
+  const std::function<void(const std::string& filename)> onYTMusicOpen; 
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
   void render();
   int getMenuItemCount() const;
-  bool storeCoverBuffer();    // Store frame buffer for cover image
-  bool restoreCoverBuffer();  // Restore frame buffer from stored cover
-  void freeCoverBuffer();     // Free the stored cover buffer
+  bool storeCoverBuffer();    
+  bool restoreCoverBuffer();  
+  void freeCoverBuffer();     
   void loadRecentBooks(int maxBooks);
   void loadRecentCovers(int coverHeight);
 
@@ -49,14 +53,18 @@ class HomeActivity final : public Activity {
                         const std::function<void(const std::string& path)>& onSelectBook,
                         const std::function<void()>& onMyLibraryOpen, const std::function<void()>& onRecentsOpen,
                         const std::function<void()>& onSettingsOpen, const std::function<void()>& onFileTransferOpen,
-                        const std::function<void()>& onOpdsBrowserOpen)
+                        const std::function<void()>& onOpdsBrowserOpen,
+                        // Added parameter to constructor
+                        const std::function<void(const std::string& filename)>& onYTMusicOpen) 
       : Activity("Home", renderer, mappedInput),
         onSelectBook(onSelectBook),
         onMyLibraryOpen(onMyLibraryOpen),
         onRecentsOpen(onRecentsOpen),
         onSettingsOpen(onSettingsOpen),
         onFileTransferOpen(onFileTransferOpen),
-        onOpdsBrowserOpen(onOpdsBrowserOpen) {}
+        onOpdsBrowserOpen(onOpdsBrowserOpen),
+        // Initialize the member variable
+        onYTMusicOpen(onYTMusicOpen) {} 
   void onEnter() override;
   void onExit() override;
   void loop() override;
